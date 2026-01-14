@@ -102,6 +102,16 @@ if __name__ == '__main__':
     # ----------------------------------------------------
     
     data_loader = create_dataloader(opt)
+    # 直接读取 DataLoader 的长度，这就是最准确的 "Steps per Epoch"
+    steps_per_epoch = len(data_loader) 
+    opt.total_steps_for_scheduler = steps_per_epoch * opt.niter
+    
+    print(f"===========================================================")
+    print(f"🎯 Auto-Correction for Scheduler:")
+    print(f"   Steps per Epoch: {steps_per_epoch}")
+    print(f"   Total Epochs:    {opt.niter}")
+    print(f"   Total Steps:     {opt.total_steps_for_scheduler}")
+    print(f"===========================================================")
 
     # --- [Auto-Patch] 验证集加载修复 ---
     print("🛡️ Switching to BinaryImageFolder for Validation...")
