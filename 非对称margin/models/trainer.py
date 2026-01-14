@@ -61,13 +61,15 @@ class Trainer(BaseModel):
         
         self.scheduler = None
         if hasattr(opt, 'warmup_steps') and opt.warmup_steps > 0:
-            print(f">>> Using Cosine Scheduler with {opt.warmup_steps} warmup steps.")
-            try:
-                self.scheduler = get_cosine_schedule_with_warmup(
-                    self.optimizer, num_warmup_steps=opt.warmup_steps, num_training_steps=opt.niter * 1000 
-                )
-            except:
-                pass 
+# 优先使用我们在 train.py 里算好的值
+            # 如果没算（为了兼容旧代码），再回退到 opt.niter * 1000
+            total_steps = getattr(opt, 'total_steps_for_scheduler', opt.niter * 1000)
+            
+            self.scheduler = get_cosine_schedule_with_warmup(
+                self.optimizer, 
+                num_warmup_steps=opt.warmup_steps, 
+                num_training_steps=total_steps # ✅ 彻底修复
+            )
 
     def set_input(self, input):
         self.input = input[0].to(self.device)
