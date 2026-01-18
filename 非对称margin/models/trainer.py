@@ -60,16 +60,20 @@ class Trainer(BaseModel):
         self.model.to(opt.gpu_ids[0])
         
         self.scheduler = None
+        # 检查参数是否存在且大于0
         if hasattr(opt, 'warmup_steps') and opt.warmup_steps > 0:
             # 优先使用我们在 train.py 里算好的值
             # 如果没算（为了兼容旧代码），再回退到 opt.niter * 1000
             total_steps = getattr(opt, 'total_steps_for_scheduler', opt.niter * 1000)
             
+            print(f">>> Initializing Scheduler: Warmup={opt.warmup_steps}, Total Steps={total_steps}")
             self.scheduler = get_cosine_schedule_with_warmup(
                 self.optimizer, 
                 num_warmup_steps=opt.warmup_steps, 
-                num_training_steps=total_steps # ✅ 彻底修复步数
+                num_training_steps=total_steps
             )
+        else:
+            print(">>> ⚠️ Warning: Scheduler NOT initialized (warmup_steps is 0 or missing).")
 
     def set_input(self, input):
         self.input = input[0].to(self.device)
@@ -98,7 +102,6 @@ class Trainer(BaseModel):
 
     def test(self):
         # 专门用于 test_diffusion.py 的测试方法
-        # 显式要求返回能量
         with torch.no_grad():
             self.output = self.model(self.input, return_energy=True)
             
@@ -150,13 +153,13 @@ class Trainer(BaseModel):
                 loss_smooth = F.mse_loss(self.e_real, self.e_real_noisy) + \
                               F.mse_loss(self.e_fake, self.e_fake_noisy)
             
-            # 📊 【监控模块】(仅在主进程打印，避免刷屏)
-            if self.training and hasattr(self, 'total_steps') and self.total_steps % 100 == 0:
+            # 📊 【监控模块】(关键修复)
+            # fix: 使用 self.opt.isTrain 替代 self.training (Trainer 没有该属性)
+            if self.opt.isTrain and hasattr(self, 'total_steps') and self.total_steps % 100 == 0:
                  e_real_val = self.e_real[real_mask].mean().item() if real_mask.sum() > 0 else 0.0
                  e_fake_val = self.e_fake[fake_mask].mean().item() if fake_mask.sum() > 0 else 0.0
                  print(f" [Energy] Real: {e_real_val:.3f} | Fake: {e_fake_val:.3f} | Gap: {e_fake_val - e_real_val:.3f}")
     
-            # 使用 self.lambda_ebm (默认为 0.5，与成功版一致)
             total_loss = loss_cls + self.lambda_ebm * loss_energy + self.lambda_smooth * loss_smooth
             return total_loss
 
@@ -167,12 +170,8 @@ class Trainer(BaseModel):
         self.optimizer.zero_grad()
         self.loss.backward()
         
-        # ============================================================
         # 🛡️ 梯度裁剪 (Gradient Clipping)
-        # 说明：防止 EBM 训练初期因能量剧烈波动导致的梯度爆炸
-        # ============================================================
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0) 
-        # ============================================================
         
         self.optimizer.step()
         if self.scheduler:
