@@ -13,6 +13,8 @@ class BaseOptions():
         parser.add_argument('--arch', type=str, default='res50', help='see my_models/__init__.py')
         parser.add_argument('--fix_backbone', action='store_true') 
         parser.add_argument('--use_svd', action='store_true')
+        # 添加 svd_rank_ratio 参数，否则脚本传参会报错
+        parser.add_argument('--svd_rank_ratio', type=float, default=0.25, help='SVD rank ratio for low-rank adaptation')
 
         # data augmentation
         parser.add_argument('--rz_interp', default='bilinear')
